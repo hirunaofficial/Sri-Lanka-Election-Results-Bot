@@ -3,8 +3,12 @@ import json
 import requests
 import time
 import threading
+from dotenv import load_dotenv
+import os
 
-TOKEN = 'your_telegram_bot_token'
+load_dotenv()
+TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
+
 bot = telebot.TeleBot(TOKEN)
 USER_DATA_FILE = 'users.json'
 API_URL = "https://example.com/election/results"
