@@ -32,7 +32,9 @@ def send_welcome(message):
     if user_id not in user_data:
         user_data[user_id] = {"subscribed": True}
         save_user_data(user_data)
-    bot.reply_to(message, "👋 Welcome to the **Sri Lanka Election Results Bot** 🇱🇰!\n\nUse /help to see available commands.")
+        bot.reply_to(message, "👋 Welcome to the **Sri Lanka Election Results Bot** 🇱🇰!\n\nYou have been **automatically subscribed** to receive overall election updates. 📰\n\nUse /help to see available commands.")
+    else:
+        bot.reply_to(message, "👋 Welcome back to the **Sri Lanka Election Results Bot** 🇱🇰!\n\nUse /help to see available commands.")
 
 @bot.message_handler(commands=['help'])
 def send_help(message):
@@ -115,8 +117,10 @@ def format_results(data):
     if 'results' not in data or len(data['results']) == 0:
         return "ℹ️ No results available."
 
+    top_candidates = sorted(data['results'], key=lambda x: int(x['votes_received'].replace(',', '')), reverse=True)[:5]
+
     result_message = f"📊 **{data.get('message', 'Results')}**:\n\n"
-    for result in data['results']:
+    for result in top_candidates:
         result_message += (
             f"🗳️ **{result['candidate_name']}** ({result['party_abbreviation']}):\n"
             f"  • **{result['percentage']}** of the vote\n"
