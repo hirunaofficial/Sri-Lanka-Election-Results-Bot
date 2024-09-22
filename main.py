@@ -11,12 +11,7 @@ TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 
 bot = telebot.TeleBot(TOKEN)
 USER_DATA_FILE = 'users.json'
-API_URL = "https://example.com/election/results"
-
-district_results = {
-    "colombo": "Colombo Results: Party A - 40%, Party B - 35%, Party C - 25%",
-    "gampaha": "Gampaha Results: Party A - 42%, Party B - 33%, Party C - 25%"
-}
+BASE_API_URL = "http://127.0.0.1:5000/api"
 
 def load_user_data():
     try:
@@ -37,29 +32,64 @@ def send_welcome(message):
     if user_id not in user_data:
         user_data[user_id] = {"subscribed": True}
         save_user_data(user_data)
-    bot.reply_to(message, "👋 Welcome to the Sri Lanka Election Results Bot 🇱🇰!\nUse /help to see available commands.")
+    bot.reply_to(message, "👋 Welcome to the **Sri Lanka Election Results Bot** 🇱🇰!\n\nUse /help to see available commands.")
 
 @bot.message_handler(commands=['help'])
 def send_help(message):
     help_text = (
-        "🛠️ Here are the commands you can use:\n"
-        "/results [district] - Check election results for a specific district.\n"
-        "/subscribe - Subscribe to receive overall election updates.\n"
-        "/unsubscribe - Unsubscribe from overall updates.\n"
-        "🔔 Stay informed with the latest election results!"
+        "🛠️ **Here are the commands you can use**:\n\n"
+        "📊 `/results [district]` - Check election results for a specific district.\n"
+        "📍 `/district [district]` - Get detailed results for a specific district.\n"
+        "🏘️ `/division [district] [division]` - Get results for a specific division within a district.\n"
+        "🔔 `/subscribe` - Subscribe to receive overall election updates.\n"
+        "🚫 `/unsubscribe` - Unsubscribe from overall updates.\n\n"
+        "Stay informed with the latest election results! 🗳️"
     )
-    bot.reply_to(message, help_text)
+    bot.reply_to(message, help_text, parse_mode='Markdown')
 
 @bot.message_handler(commands=['results'])
 def send_district_result(message):
     try:
-        district_name = message.text.split()[1].lower()
-        if district_name in district_results:
-            bot.reply_to(message, district_results[district_name])
+        district_name = message.text.split()[1].capitalize()
+        response = requests.get(f"{BASE_API_URL}/district?district={district_name}")
+        if response.status_code == 200:
+            data = response.json().get('data', {})
+            message_text = format_results(data)
+            bot.reply_to(message, message_text, parse_mode='Markdown')
         else:
-            bot.reply_to(message, "❌ Sorry, I don't have results for that district.")
+            bot.reply_to(message, "❌ Sorry, I couldn't fetch the results for that district.")
     except IndexError:
-        bot.reply_to(message, "⚠️ Please provide a district name. Example: /results colombo")
+        bot.reply_to(message, "⚠️ Please provide a district name. Example: `/results Colombo`", parse_mode='Markdown')
+
+@bot.message_handler(commands=['district'])
+def send_detailed_district_results(message):
+    try:
+        district_name = message.text.split()[1].capitalize()
+        response = requests.get(f"{BASE_API_URL}/district?district={district_name}")
+        if response.status_code == 200:
+            data = response.json().get('data', {})
+            message_text = format_results(data)
+            bot.reply_to(message, f"📍 Detailed Results for **{district_name}**:\n\n{message_text}", parse_mode='Markdown')
+        else:
+            bot.reply_to(message, "❌ Sorry, I couldn't fetch the results for that district.")
+    except IndexError:
+        bot.reply_to(message, "⚠️ Please provide a district name. Example: `/district Colombo`", parse_mode='Markdown')
+
+@bot.message_handler(commands=['division'])
+def send_division_results(message):
+    try:
+        parts = message.text.split()
+        district_name = parts[1].capitalize()
+        division_name = parts[2].capitalize()
+        response = requests.get(f"{BASE_API_URL}/division?district={district_name}&division={division_name}")
+        if response.status_code == 200:
+            data = response.json().get('data', {})
+            message_text = format_results(data)
+            bot.reply_to(message, f"🏘️ Division Results for **{division_name}**, {district_name}:\n\n{message_text}", parse_mode='Markdown')
+        else:
+            bot.reply_to(message, f"❌ Sorry, I couldn't fetch the results for the division **{division_name}** in {district_name}.")
+    except IndexError:
+        bot.reply_to(message, "⚠️ Please provide both a district and division. Example: `/division Colombo Medawachchiya`", parse_mode='Markdown')
 
 @bot.message_handler(commands=['subscribe'])
 def subscribe_to_updates(message):
@@ -67,7 +97,7 @@ def subscribe_to_updates(message):
     if user_id in user_data:
         user_data[user_id]["subscribed"] = True
         save_user_data(user_data)
-        bot.reply_to(message, "✅ You have subscribed to overall updates.")
+        bot.reply_to(message, "✅ You have successfully **subscribed** to overall election updates!", parse_mode='Markdown')
     else:
         bot.reply_to(message, "⚠️ Please start the bot first using /start.")
 
@@ -77,14 +107,29 @@ def unsubscribe_from_updates(message):
     if user_id in user_data and user_data[user_id]["subscribed"]:
         user_data[user_id]["subscribed"] = False
         save_user_data(user_data)
-        bot.reply_to(message, "🚫 You have unsubscribed from overall updates.")
+        bot.reply_to(message, "🚫 You have successfully **unsubscribed** from overall election updates.", parse_mode='Markdown')
     else:
         bot.reply_to(message, "⚠️ You are not subscribed to overall updates.")
 
+def format_results(data):
+    if 'results' not in data or len(data['results']) == 0:
+        return "ℹ️ No results available."
+
+    result_message = f"📊 **{data.get('message', 'Results')}**:\n\n"
+    for result in data['results']:
+        result_message += (
+            f"🗳️ **{result['candidate_name']}** ({result['party_abbreviation']}):\n"
+            f"  • **{result['percentage']}** of the vote\n"
+            f"  • **{result['votes_received']}** votes received\n\n"
+        )
+    result_message += "🔗 **Source**: [elections.gov.lk](https://www.elections.gov.lk)"
+    return result_message
+
 def fetch_overall_results():
-    response = requests.get(API_URL)
+    response = requests.get(f"{BASE_API_URL}/election")
     if response.status_code == 200:
-        return response.json().get('overall_results', 'No overall results available.')
+        data = response.json().get('data', {})
+        return format_results(data)
     else:
         return "🚨 Error fetching overall results."
 
@@ -92,14 +137,16 @@ def send_overall_updates():
     overall_results = fetch_overall_results()
     for user_id, user_info in user_data.items():
         if user_info["subscribed"]:
-            bot.send_message(user_id, f"🔄 Overall Update: {overall_results}")
+            bot.send_message(user_id, f"🔄 **Overall Election Update**:\n\n{overall_results}", parse_mode='Markdown')
 
 def schedule_updates(interval):
     while True:
         send_overall_updates()
         time.sleep(interval)
 
-bot.polling()
-
-update_thread = threading.Thread(target=schedule_updates, args=(1,))
+# Start the update thread before polling
+update_thread = threading.Thread(target=schedule_updates, args=(5,))
 update_thread.start()
+
+# Start polling for bot commands
+bot.polling()
