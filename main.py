@@ -32,7 +32,7 @@ def send_welcome(message):
     if user_id not in user_data:
         user_data[user_id] = {"subscribed": True}
         save_user_data(user_data)
-        bot.reply_to(message, "👋 Welcome to the **Sri Lanka Election Results Bot** 🇱🇰!\n\nYou have been **automatically subscribed** to receive overall election updates. 📰\n\nUse /help to see available commands.")
+        bot.reply_to(message, "👋 Welcome to the **Sri Lanka Election Results Bot** 🇱🇰!\n\nYou have been **automatically subscribed** to receive the latest election results. 📰\n\nUse /help to see available commands.")
     else:
         bot.reply_to(message, "👋 Welcome back to the **Sri Lanka Election Results Bot** 🇱🇰!\n\nUse /help to see available commands.")
 
@@ -43,7 +43,7 @@ def send_help(message):
         "📊 `/results [district]` - Check election results for a specific district.\n"
         "📍 `/district [district]` - Get detailed results for a specific district.\n"
         "🏘️ `/division [district] [division]` - Get results for a specific division within a district.\n"
-        "🔔 `/subscribe` - Subscribe to receive overall election updates.\n"
+        "🔔 `/subscribe` - Subscribe to receive the latest election updates.\n"
         "🚫 `/unsubscribe` - Unsubscribe from overall updates.\n\n"
         "Stay informed with the latest election results! 🗳️"
     )
@@ -99,7 +99,7 @@ def subscribe_to_updates(message):
     if user_id in user_data:
         user_data[user_id]["subscribed"] = True
         save_user_data(user_data)
-        bot.reply_to(message, "✅ You have successfully **subscribed** to overall election updates!", parse_mode='Markdown')
+        bot.reply_to(message, "✅ You have successfully **subscribed** to the latest election updates!", parse_mode='Markdown')
     else:
         bot.reply_to(message, "⚠️ Please start the bot first using /start.")
 
@@ -111,7 +111,7 @@ def unsubscribe_from_updates(message):
         save_user_data(user_data)
         bot.reply_to(message, "🚫 You have successfully **unsubscribed** from overall election updates.", parse_mode='Markdown')
     else:
-        bot.reply_to(message, "⚠️ You are not subscribed to overall updates.")
+        bot.reply_to(message, "⚠️ You are not subscribed to the latest updates.")
 
 def format_results(data):
     if 'results' not in data or len(data['results']) == 0:
@@ -129,23 +129,23 @@ def format_results(data):
     result_message += "🔗 **Source**: [elections.gov.lk](https://www.elections.gov.lk)"
     return result_message
 
-def fetch_overall_results():
+def fetch_latest_election_results():
     response = requests.get(f"{BASE_API_URL}/election")
     if response.status_code == 200:
         data = response.json().get('data', {})
         return format_results(data)
     else:
-        return "🚨 Error fetching overall results."
+        return "🚨 Error fetching the latest election results."
 
-def send_overall_updates():
-    overall_results = fetch_overall_results()
+def send_latest_election_updates():
+    latest_results = fetch_latest_election_results()
     for user_id, user_info in user_data.items():
         if user_info["subscribed"]:
-            bot.send_message(user_id, f"🔄 **Overall Election Update**:\n\n{overall_results}", parse_mode='Markdown')
+            bot.send_message(user_id, f"🆕 **New Election Results**:\n\n{latest_results}", parse_mode='Markdown')
 
 def schedule_updates(interval):
     while True:
-        send_overall_updates()
+        send_latest_election_updates()
         time.sleep(interval)
 
 # Start the update thread before polling
