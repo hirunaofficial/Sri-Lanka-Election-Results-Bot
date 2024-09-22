@@ -8,10 +8,14 @@ import os
 
 load_dotenv()
 TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
+AUTH_TOKEN = os.getenv('AUTHORIZATION_TOKEN')
 
 bot = telebot.TeleBot(TOKEN)
 USER_DATA_FILE = 'users.json'
 BASE_API_URL = "http://127.0.0.1:5000/api"
+AUTH_HEADER = {
+    "Authorization": AUTH_TOKEN
+}
 
 def load_user_data():
     try:
@@ -25,6 +29,7 @@ def save_user_data(data):
         json.dump(data, file)
 
 user_data = load_user_data()
+last_sent_message = ""
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
@@ -53,7 +58,7 @@ def send_help(message):
 def send_district_result(message):
     try:
         district_name = message.text.split()[1].capitalize()
-        response = requests.get(f"{BASE_API_URL}/district?district={district_name}")
+        response = requests.get(f"{BASE_API_URL}/district?district={district_name}", headers=AUTH_HEADER)
         if response.status_code == 200:
             data = response.json().get('data', {})
             message_text = format_results(data)
@@ -67,7 +72,7 @@ def send_district_result(message):
 def send_detailed_district_results(message):
     try:
         district_name = message.text.split()[1].capitalize()
-        response = requests.get(f"{BASE_API_URL}/district?district={district_name}")
+        response = requests.get(f"{BASE_API_URL}/district?district={district_name}", headers=AUTH_HEADER)
         if response.status_code == 200:
             data = response.json().get('data', {})
             message_text = format_results(data)
@@ -83,7 +88,7 @@ def send_division_results(message):
         parts = message.text.split()
         district_name = parts[1].capitalize()
         division_name = parts[2].capitalize()
-        response = requests.get(f"{BASE_API_URL}/division?district={district_name}&division={division_name}")
+        response = requests.get(f"{BASE_API_URL}/division?district={district_name}&division={division_name}", headers=AUTH_HEADER)
         if response.status_code == 200:
             data = response.json().get('data', {})
             message_text = format_results(data)
@@ -130,7 +135,7 @@ def format_results(data):
     return result_message
 
 def fetch_latest_election_results():
-    response = requests.get(f"{BASE_API_URL}/election")
+    response = requests.get(f"{BASE_API_URL}/election", headers=AUTH_HEADER)
     if response.status_code == 200:
         data = response.json().get('data', {})
         return format_results(data)
@@ -138,10 +143,16 @@ def fetch_latest_election_results():
         return "🚨 Error fetching the latest election results."
 
 def send_latest_election_updates():
+    global last_sent_message
     latest_results = fetch_latest_election_results()
-    for user_id, user_info in user_data.items():
-        if user_info["subscribed"]:
-            bot.send_message(user_id, f"🆕 **New Election Results**:\n\n{latest_results}", parse_mode='Markdown')
+
+    if latest_results != last_sent_message:
+        for user_id, user_info in user_data.items():
+            if user_info["subscribed"]:
+                bot.send_message(user_id, f"🆕 **New Election Results**:\n\n{latest_results}", parse_mode='Markdown')
+        last_sent_message = latest_results
+    else:
+        print("No new election results to send.")
 
 def schedule_updates(interval):
     while True:
