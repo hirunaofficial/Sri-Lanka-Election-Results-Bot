@@ -17,8 +17,8 @@ AUTH_HEADER = {
     "Authorization": AUTH_TOKEN
 }
 
-ADMIN_ID = 1108072683  # Admin's Telegram ID
-election_active = True  # Global flag to track if the election is active
+election_active = True
+ADMIN_ID = 1108072683
 
 def load_user_data():
     try:
@@ -46,6 +46,19 @@ def is_election_active(func):
         else:
             return func(message)
     return wrapper
+
+@bot.message_handler(commands=['enable', 'disable'])
+def toggle_election_status(message):
+    global election_active
+    if message.from_user.id == ADMIN_ID:
+        if message.text == '/enable':
+            election_active = True
+            bot.reply_to(message, "✅ The bot is now active and all commands are enabled.")
+        elif message.text == '/disable':
+            election_active = False
+            bot.reply_to(message, "🚫 The bot is now disabled, and all election-related commands are blocked.")
+    else:
+        bot.reply_to(message, "❌ You do not have permission to use this command.")
 
 @bot.message_handler(commands=['start'])
 @is_election_active
@@ -85,6 +98,7 @@ def send_overall_result(message):
             bot.reply_to(message, "❌ Sorry, I couldn't fetch the overall results.")
     except Exception as e:
         bot.reply_to(message, f"🚨 An error occurred: {str(e)}")
+
 
 @bot.message_handler(commands=['district'])
 @is_election_active
@@ -140,27 +154,50 @@ def unsubscribe_from_updates(message):
     else:
         bot.reply_to(message, "⚠️ You are not subscribed to the latest updates.")
 
-@bot.message_handler(commands=['disable'])
-def disable_election(message):
-    global election_active
-    if message.from_user.id == ADMIN_ID:
-        election_active = False
-        bot.reply_to(message, "🛑 The election is now over. All commands are disabled. Thank you for using the bot!")
-    else:
-        bot.reply_to(message, "⚠️ You do not have permission to disable the bot.")
-
-@bot.message_handler(commands=['enable'])
-def enable_election(message):
-    global election_active
-    if message.from_user.id == ADMIN_ID:
-        election_active = True
-        bot.reply_to(message, "✅ The bot is now enabled. You can use all commands again.")
-    else:
-        bot.reply_to(message, "⚠️ You do not have permission to enable the bot.")
-
 def format_results(data):
-    # (Same format_results function as before)
-    pass
+    if 'results' not in data or len(data['results']) == 0:
+        return "ℹ️ No results available."
 
-# Start the polling
+    top_candidates = sorted(data['results'], key=lambda x: int(x['votes_received'].replace(',', '')), reverse=True)[:5]
+
+    result_message = f"📊 {data.get('message', 'Results')}:\n\n"
+    for result in top_candidates:
+        result_message += (
+            f"🗳️ {result['candidate_name']} ({result['party_abbreviation']}):\n"
+            f"  • {result['percentage']} of the vote\n"
+            f"  • {result['votes_received']} votes received\n\n"
+        )
+    result_message += "🔗 Source: [elections.gov.lk](https://www.elections.gov.lk)"
+    return result_message
+
+def fetch_latest_election_results():
+    response = requests.get(f"{BASE_API_URL}/election", headers=AUTH_HEADER)
+    if response.status_code == 200:
+        data = response.json().get('data', {})
+        return format_results(data)
+    else:
+        return "🚨 Error fetching the latest election results."
+
+def send_latest_election_updates():
+    global last_sent_message
+    latest_results = fetch_latest_election_results()
+
+    if latest_results != last_sent_message:
+        for user_id, user_info in user_data.items():
+            if user_info["subscribed"]:
+                bot.send_message(user_id, f"🆕 New Election Results:\n\n{latest_results}", parse_mode='Markdown')
+        last_sent_message = latest_results
+    else:
+        print("No new election results to send.")
+
+def schedule_updates(interval):
+    while True:
+        send_latest_election_updates()
+        time.sleep(interval)
+
+# Start the update thread before polling
+update_thread = threading.Thread(target=schedule_updates, args=(5,))
+update_thread.start()
+
+# Start polling for bot commands
 bot.polling()
